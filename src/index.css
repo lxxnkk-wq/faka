@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", serif;
+  --font-display: "Outfit", sans-serif;
+  --color-brand: #C5A059; /* Muted Gold */
+  --color-surface: #0A0A0A;
+  --color-card: #121212;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-white antialiased overflow-x-hidden;
+    font-family: var(--font-sans);
+  }
+}
+
+@layer utilities {
+  .sidebar-luxury {
+    @apply bg-surface border-r border-white/5;
+  }
+  .gold-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-tr from-[#C5A059] via-[#F2D091] to-[#C5A059];
+  }
+  .card-luxury {
+    @apply bg-card border border-white/5 transition-all duration-500;
+  }
+  .card-luxury:hover {
+    @apply border-brand/30 bg-white/[0.02];
+  }
+  .text-vertical {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
