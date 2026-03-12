@@ -38,7 +38,19 @@ import {
   Globe,
   Lock,
   Twitter,
-  Instagram
+  Instagram,
+  Wallet,
+  Key,
+  Settings,
+  LogOut,
+  Activity,
+  Shield,
+  Copy,
+  Plus,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -75,6 +87,8 @@ interface Order {
   date: string;
   total: number;
   status: 'completed' | 'processing' | 'cancelled';
+  statusDescription?: string;
+  estimatedDelivery?: string;
   items: OrderItem[];
 }
 
@@ -185,6 +199,8 @@ const MOCK_ORDERS: Order[] = [
     date: '2026-03-05T14:20:00Z',
     total: 357.00,
     status: 'completed',
+    statusDescription: 'All digital keys have been successfully delivered to your vault.',
+    estimatedDelivery: '2026-03-05T14:21:00Z',
     items: [
       { id: '1', name: 'NordVPN Ultra Premium', price: 199.00, quantity: 1, image: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80' },
       { id: '3', name: 'ChatGPT Plus Enterprise', price: 158.00, quantity: 1, image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=800&q=80' }
@@ -195,6 +211,8 @@ const MOCK_ORDERS: Order[] = [
     date: '2026-02-28T09:15:00Z',
     total: 88.00,
     status: 'completed',
+    statusDescription: 'Archive entry finalized. Professional suite activated.',
+    estimatedDelivery: '2026-02-28T09:16:00Z',
     items: [
       { id: '4', name: 'JetBrains Master Suite', price: 88.00, quantity: 1, image: 'https://images.unsplash.com/photo-1587620962725-abab7fe55159?auto=format&fit=crop&w=800&q=80' }
     ]
@@ -357,9 +375,9 @@ const Header = ({ cartCount, onOpenCart, searchQuery, setSearchQuery, cartBump }
             </span>
           )}
         </button>
-        <button className="px-6 py-2.5 border border-white/10 rounded-full text-[10px] font-bold tracking-widest hover:bg-white hover:text-black transition-all">
-          SIGN IN
-        </button>
+        <Link to="/dashboard" className="px-6 py-2.5 border border-white/10 rounded-full text-[10px] font-bold tracking-widest hover:bg-white hover:text-black transition-all">
+          ACCOUNT
+        </Link>
       </div>
     </header>
   );
@@ -846,6 +864,393 @@ const NewsDetailPage = () => {
         </footer>
       </article>
     </motion.div>
+  );
+};
+
+// --- Dashboard Components ---
+
+const DashboardOverview = () => (
+  <div className="space-y-8">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {[
+        { label: '账户余额', value: '¥ 12,480.00', icon: Wallet, color: 'text-brand' },
+        { label: '累计订单', value: '42', icon: ShoppingCart, color: 'text-white' },
+        { label: 'API 调用 (本月)', value: '1,204', icon: Activity, color: 'text-white' },
+      ].map((stat, i) => (
+        <motion.div 
+          key={i}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.1 }}
+          className="bg-white/5 border border-white/10 p-6 rounded-2xl"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <stat.icon size={20} className="text-white/20" />
+            <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Live</span>
+          </div>
+          <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{stat.label}</p>
+          <p className={`text-2xl font-serif italic ${stat.color}`}>{stat.value}</p>
+        </motion.div>
+      ))}
+    </div>
+
+    <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="p-6 border-b border-white/10 flex items-center justify-between">
+        <h3 className="text-sm font-bold uppercase tracking-widest">近期活动</h3>
+        <button className="text-[10px] font-bold text-brand uppercase tracking-widest">查看全部</button>
+      </div>
+      <div className="divide-y divide-white/5">
+        {[
+          { type: '购买', desc: '订阅更新: NordVPN Ultra', date: '2 小时前', amount: '- ¥ 199.00' },
+          { type: '充值', desc: '钱包充值: 支付宝', date: '昨天', amount: '+ ¥ 1,000.00' },
+          { type: 'API', desc: '生成新 API 密钥: Production', date: '2 天前', amount: '系统' },
+        ].map((item, i) => (
+          <div key={i} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+            <div className="flex items-center gap-4">
+              <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold">
+                {item.type[0]}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-white/80">{item.desc}</p>
+                <p className="text-[10px] text-white/20 uppercase tracking-widest">{item.date}</p>
+              </div>
+            </div>
+            <p className={`text-xs font-mono ${item.amount.startsWith('+') ? 'text-emerald-400' : 'text-white/60'}`}>
+              {item.amount}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const DashboardOrders = () => (
+  <div className="space-y-6">
+    <div className="flex items-center justify-between mb-8">
+      <h2 className="text-2xl font-serif italic">我的订单</h2>
+      <div className="flex gap-4">
+        <button className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-bold tracking-widest hover:bg-white/10 transition-all">全部</button>
+        <button className="px-4 py-2 text-[10px] font-bold text-white/40 tracking-widest uppercase">进行中</button>
+        <button className="px-4 py-2 text-[10px] font-bold text-white/40 tracking-widest uppercase">已完成</button>
+      </div>
+    </div>
+    
+    <div className="space-y-4">
+      {MOCK_ORDERS.map((order) => (
+        <div key={order.id} className="bg-white/5 border border-white/10 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 bg-neutral-900 rounded-xl overflow-hidden border border-white/5">
+              <img src={order.items[0].image} className="w-full h-full object-cover opacity-60" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-brand uppercase tracking-widest mb-1">{order.id}</p>
+              <h3 className="text-lg font-serif italic mb-1">{order.items[0].name}{order.items.length > 1 ? ` 等 ${order.items.length} 件商品` : ''}</h3>
+              <p className="text-[10px] text-white/20 uppercase tracking-widest">
+                {new Date(order.date).toLocaleDateString()} • 
+                {order.estimatedDelivery ? ` 预计送达: ${new Date(order.estimatedDelivery).toLocaleDateString()}` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-8">
+            <div className="text-right">
+              <p className="text-xs font-bold text-white mb-1">¥ {order.total.toLocaleString()}</p>
+              <span className={`text-[8px] font-black px-2 py-1 rounded uppercase tracking-widest ${
+                order.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' :
+                order.status === 'processing' ? 'bg-amber-500/10 text-amber-500' :
+                'bg-red-500/10 text-red-500'
+              }`}>{order.status}</span>
+            </div>
+            <Link to="/orders" className="p-3 rounded-full border border-white/10 hover:bg-white hover:text-black transition-all">
+              <ArrowUpRight size={16} />
+            </Link>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const DashboardWallet = () => (
+  <div className="space-y-8">
+    <div className="bg-brand p-10 rounded-3xl text-surface relative overflow-hidden">
+      <div className="relative z-10">
+        <p className="text-[10px] font-black tracking-[0.4em] uppercase mb-2 opacity-60">Available Balance</p>
+        <h2 className="text-5xl font-serif font-bold italic mb-8">¥ 12,480.00</h2>
+        <div className="flex gap-4">
+          <button className="px-8 py-3 bg-surface text-white rounded-full text-[10px] font-bold tracking-widest uppercase hover:bg-black transition-all">立即充值</button>
+          <button className="px-8 py-3 border border-surface/20 rounded-full text-[10px] font-bold tracking-widest uppercase hover:bg-surface/10 transition-all">提现</button>
+        </div>
+      </div>
+      <Wallet className="absolute -right-10 -bottom-10 w-64 h-64 opacity-10 rotate-12" />
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="bg-white/5 border border-white/10 p-8 rounded-2xl">
+        <h3 className="text-xs font-bold uppercase tracking-widest mb-6">支付方式</h3>
+        <div className="space-y-4">
+          <div className="p-4 border border-white/10 rounded-xl flex items-center justify-between bg-white/[0.02]">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-6 bg-blue-600 rounded flex items-center justify-center text-[8px] font-bold text-white">VISA</div>
+              <p className="text-xs font-medium">**** 4242</p>
+            </div>
+            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">默认</span>
+          </div>
+          <button className="w-full p-4 border border-dashed border-white/10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-bold text-white/40 hover:text-white hover:border-white/30 transition-all">
+            <Plus size={14} /> 添加新方式
+          </button>
+        </div>
+      </div>
+      <div className="bg-white/5 border border-white/10 p-8 rounded-2xl">
+        <h3 className="text-xs font-bold uppercase tracking-widest mb-6">财务概览</h3>
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-white/40">本月支出</span>
+            <span className="text-xs font-mono">¥ 2,450.00</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-white/40">本月充值</span>
+            <span className="text-xs font-mono">¥ 5,000.00</span>
+          </div>
+          <div className="pt-4 border-t border-white/5 flex justify-between items-center">
+            <span className="text-xs font-bold">待处理退款</span>
+            <span className="text-xs font-mono text-brand">¥ 0.00</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const DashboardAPI = () => (
+  <div className="space-y-8">
+    <div className="flex items-center justify-between">
+      <div>
+        <h2 className="text-2xl font-serif italic mb-2">API 对接</h2>
+        <p className="text-xs text-white/40">管理您的 API 密钥并集成 Nova Collective 服务。</p>
+      </div>
+      <button className="px-6 py-3 bg-brand text-surface rounded-full text-[10px] font-bold tracking-widest uppercase hover:opacity-90 transition-all">创建新密钥</button>
+    </div>
+
+    <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+      <table className="w-full text-left">
+        <thead>
+          <tr className="border-b border-white/10 bg-white/[0.02]">
+            <th className="px-6 py-4 text-[10px] font-bold text-white/40 uppercase tracking-widest">名称</th>
+            <th className="px-6 py-4 text-[10px] font-bold text-white/40 uppercase tracking-widest">密钥</th>
+            <th className="px-6 py-4 text-[10px] font-bold text-white/40 uppercase tracking-widest">最后使用</th>
+            <th className="px-6 py-4 text-[10px] font-bold text-white/40 uppercase tracking-widest">状态</th>
+            <th className="px-6 py-4"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/5">
+          {[
+            { name: 'Production App', key: 'nova_live_••••••••••••••••', last: '2 分钟前', status: 'Active' },
+            { name: 'Staging Environment', key: 'nova_test_••••••••••••••••', last: '3 天前', status: 'Active' },
+          ].map((key, i) => (
+            <tr key={i} className="hover:bg-white/[0.01] transition-colors">
+              <td className="px-6 py-4 text-xs font-medium">{key.name}</td>
+              <td className="px-6 py-4 font-mono text-[10px] text-white/40">{key.key}</td>
+              <td className="px-6 py-4 text-[10px] text-white/20 uppercase">{key.last}</td>
+              <td className="px-6 py-4">
+                <span className="text-[8px] font-black px-2 py-1 bg-emerald-500/10 text-emerald-500 rounded uppercase tracking-widest">{key.status}</span>
+              </td>
+              <td className="px-6 py-4 text-right">
+                <div className="flex items-center justify-end gap-3">
+                  <button className="p-2 text-white/20 hover:text-white transition-colors"><Copy size={14} /></button>
+                  <button className="p-2 text-white/20 hover:text-brand transition-colors"><RefreshCw size={14} /></button>
+                  <button className="p-2 text-white/20 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {[
+        { title: 'API 文档', desc: '查看完整的 REST API 参考指南', icon: HelpCircle },
+        { title: 'Webhooks', desc: '配置实时事件通知', icon: Activity },
+        { title: 'SDK 下载', desc: '获取官方 Node.js 和 Python SDK', icon: Zap },
+      ].map((item, i) => (
+        <div key={i} className="p-6 bg-white/5 border border-white/10 rounded-2xl hover:border-brand/50 transition-all cursor-pointer group">
+          <item.icon size={20} className="text-brand mb-4" />
+          <h4 className="text-sm font-bold uppercase tracking-widest mb-2 group-hover:text-brand transition-colors">{item.title}</h4>
+          <p className="text-[10px] text-white/40 leading-relaxed">{item.desc}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const DashboardSecurity = () => (
+  <div className="space-y-8">
+    <div className="bg-white/5 border border-white/10 p-8 rounded-2xl">
+      <div className="flex items-center gap-4 mb-8">
+        <div className="w-12 h-12 rounded-full bg-brand/10 flex items-center justify-center text-brand">
+          <Shield size={24} />
+        </div>
+        <div>
+          <h3 className="text-lg font-serif italic">安全中心</h3>
+          <p className="text-xs text-white/40">保护您的账户免受未经授权的访问。</p>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        {[
+          { title: '双重身份验证 (2FA)', desc: '使用身份验证器应用为您的账户添加额外安全层。', status: '未启用', action: '立即设置', active: false },
+          { title: '登录密码', desc: '定期更改您的密码以保持账户安全。', status: '上次更改: 30 天前', action: '修改密码', active: true },
+          { title: '安全问题', desc: '在找回账户时作为额外的验证方式。', status: '已设置', action: '更新', active: true },
+        ].map((item, i) => (
+          <div key={i} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border border-white/5 rounded-xl">
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <h4 className="text-sm font-bold uppercase tracking-widest">{item.title}</h4>
+                {item.active ? (
+                  <CheckCircle2 size={12} className="text-emerald-500" />
+                ) : (
+                  <span className="text-[8px] font-black px-1.5 py-0.5 bg-red-500/10 text-red-500 rounded uppercase">推荐</span>
+                )}
+              </div>
+              <p className="text-xs text-white/40">{item.desc}</p>
+            </div>
+            <div className="flex items-center gap-6">
+              <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{item.status}</span>
+              <button className="px-4 py-2 border border-white/10 rounded-full text-[10px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all">
+                {item.action}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div className="bg-white/5 border border-white/10 p-8 rounded-2xl">
+      <h3 className="text-xs font-bold uppercase tracking-widest mb-6">最近登录记录</h3>
+      <div className="space-y-4">
+        {[
+          { device: 'Chrome on macOS', location: 'Shanghai, China', ip: '192.168.1.1', time: '当前在线' },
+          { device: 'Safari on iPhone', location: 'Beijing, China', ip: '110.24.56.12', time: '2 小时前' },
+        ].map((log, i) => (
+          <div key={i} className="flex items-center justify-between p-4 bg-white/[0.02] rounded-xl">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white/40">
+                <Activity size={18} />
+              </div>
+              <div>
+                <p className="text-xs font-medium">{log.device}</p>
+                <p className="text-[10px] text-white/20 uppercase tracking-widest">{log.location} • {log.ip}</p>
+              </div>
+            </div>
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${log.time === '当前在线' ? 'text-brand' : 'text-white/20'}`}>
+              {log.time}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const UserDashboard = () => {
+  const [activeTab, setActiveTab] = useState('overview');
+  
+  const tabs = [
+    { id: 'overview', label: '概览', icon: LayoutGrid },
+    { id: 'orders', label: '我的订单', icon: ShoppingCart },
+    { id: 'wallet', label: '我的钱包', icon: Wallet },
+    { id: 'api', label: 'API 对接', icon: Key },
+    { id: 'security', label: '安全中心', icon: Shield },
+    { id: 'settings', label: '账户设置', icon: Settings },
+  ];
+
+  return (
+    <div className="px-8 md:px-16 pb-32">
+      <header className="mb-16">
+        <motion.p 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="text-[9px] font-black tracking-[0.5em] text-brand uppercase mb-6"
+        >
+          USER DASHBOARD — CONTROL CENTER
+        </motion.p>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+          <motion.h1 
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-5xl md:text-7xl font-serif font-bold italic leading-[0.9]"
+          >
+            Welcome, <br /> <span className="gold-gradient">Leo Chen.</span>
+          </motion.h1>
+          <div className="flex items-center gap-6 pb-2">
+            <div className="text-right">
+              <p className="text-xs font-bold text-white uppercase tracking-widest">Premium Member</p>
+              <p className="text-[10px] text-white/30 uppercase tracking-widest">Since Jan 2026</p>
+            </div>
+            <div className="w-16 h-16 rounded-full border-2 border-brand p-1">
+              <img 
+                src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=100&q=80" 
+                className="w-full h-full rounded-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        {/* Sidebar Nav */}
+        <aside className="lg:col-span-3 space-y-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`w-full flex items-center gap-4 px-6 py-4 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] transition-all ${
+                activeTab === tab.id 
+                  ? 'bg-brand text-surface shadow-lg shadow-brand/20' 
+                  : 'text-white/40 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <tab.icon size={18} />
+              {tab.label}
+            </button>
+          ))}
+          <div className="pt-8">
+            <button className="w-full flex items-center gap-4 px-6 py-4 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] text-red-500/60 hover:bg-red-500/10 hover:text-red-500 transition-all">
+              <LogOut size={18} />
+              退出登录
+            </button>
+          </div>
+        </aside>
+
+        {/* Content Area */}
+        <main className="lg:col-span-9 min-h-[600px]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              {activeTab === 'overview' && <DashboardOverview />}
+              {activeTab === 'orders' && <DashboardOrders />}
+              {activeTab === 'wallet' && <DashboardWallet />}
+              {activeTab === 'api' && <DashboardAPI />}
+              {activeTab === 'security' && <DashboardSecurity />}
+              {activeTab === 'settings' && (
+                <div className="flex flex-col items-center justify-center py-40 border border-dashed border-white/10 rounded-3xl">
+                  <Settings size={48} className="text-white/10 mb-6" />
+                  <h3 className="text-lg font-serif italic mb-2">账户设置</h3>
+                  <p className="text-xs text-white/30 uppercase tracking-widest">功能开发中...</p>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
+    </div>
   );
 };
 
@@ -1567,7 +1972,21 @@ const OrderLookupPage = () => {
                   <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Total Value</span>
                   <span className="text-xs font-display gold-gradient">¥{result.total.toLocaleString()}</span>
                 </div>
+                {result.estimatedDelivery && (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Est. Delivery</span>
+                    <span className="text-xs text-brand">{new Date(result.estimatedDelivery).toLocaleString()}</span>
+                  </div>
+                )}
               </div>
+              {result.statusDescription && (
+                <div className="mt-6 pt-6 border-t border-white/5">
+                  <p className="text-[10px] text-white/40 italic leading-relaxed">
+                    <span className="text-brand not-italic font-bold uppercase mr-2 tracking-widest">Update:</span>
+                    {result.statusDescription}
+                  </p>
+                </div>
+              )}
             </div>
             <div className="p-8 space-y-6">
               {result.items.map(item => (
@@ -1622,6 +2041,12 @@ const OrderHistoryPage = () => {
                     <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Total Amount</span>
                     <span className="text-xs font-display gold-gradient">¥{order.total.toLocaleString()}</span>
                   </div>
+                  {order.estimatedDelivery && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Est. Delivery</span>
+                      <span className="text-xs text-brand">{new Date(order.estimatedDelivery).toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${
@@ -1636,6 +2061,14 @@ const OrderHistoryPage = () => {
                   </button>
                 </div>
               </div>
+              {order.statusDescription && (
+                <div className="px-6 md:px-8 py-4 bg-white/[0.01] border-b border-white/5">
+                  <p className="text-[10px] text-white/40 italic leading-relaxed">
+                    <span className="text-brand not-italic font-bold uppercase mr-2 tracking-widest">Update:</span>
+                    {order.statusDescription}
+                  </p>
+                </div>
+              )}
               <div className="p-6 md:p-8 bg-black/20">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {order.items.map((item) => (
@@ -1787,6 +2220,7 @@ export default function App() {
             <Route path="/product/:id" element={<ProductDetailPage addToCart={addToCart} />} />
             <Route path="/news" element={<NewsPage />} />
             <Route path="/news/:id" element={<NewsDetailPage />} />
+            <Route path="/dashboard" element={<UserDashboard />} />
             <Route path="/checkout" element={<CheckoutPage cart={cart} />} />
             <Route path="/orders" element={<OrderHistoryPage />} />
             <Route path="/lookup" element={<OrderLookupPage />} />
