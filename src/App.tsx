@@ -3,14 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import { 
   BrowserRouter as Router, 
   Routes, 
   Route, 
   Link, 
   useParams,
-  useLocation
+  useLocation,
+  Navigate
 } from 'react-router-dom';
 import { 
   Search, 
@@ -19,6 +20,7 @@ import {
   ShieldCheck, 
   Clock, 
   ChevronRight, 
+  ChevronDown,
   ArrowRight,
   Menu,
   X,
@@ -52,7 +54,7 @@ import {
   RefreshCw,
   Trash2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useScroll, useSpring, useTransform } from 'motion/react';
 
 // --- Types ---
 interface Product {
@@ -82,6 +84,12 @@ interface OrderItem {
   image: string;
 }
 
+interface OrderUpdate {
+  date: string;
+  status: string;
+  note: string;
+}
+
 interface Order {
   id: string;
   date: string;
@@ -90,7 +98,154 @@ interface Order {
   statusDescription?: string;
   estimatedDelivery?: string;
   items: OrderItem[];
+  timeline?: OrderUpdate[];
 }
+
+interface UserProfile {
+  id: string;
+  email: string;
+  name?: string;
+}
+
+interface AuthContextType {
+  user: UserProfile | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, name: string) => Promise<void>;
+  logout: () => Promise<void>;
+  updateProfile: (name: string) => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  return context;
+};
+
+interface Toast {
+  id: number;
+  message: string;
+  type?: 'success' | 'error' | 'info';
+}
+
+interface ToastContextType {
+  addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+}
+
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+export const useToast = () => {
+  const context = useContext(ToastContext);
+  if (!context) throw new Error('useToast must be used within ToastProvider');
+  return context;
+};
+
+export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const addToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  };
+
+  return (
+    <ToastContext.Provider value={{ addToast }}>
+      {children}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-3 items-center pointer-events-none">
+        <AnimatePresence>
+          {toasts.map(toast => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, y: 20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className={`px-6 py-3 rounded-full text-[10px] font-black tracking-widest uppercase shadow-2xl flex items-center gap-3 pointer-events-auto ${
+                toast.type === 'error' ? 'bg-red-500 text-white' : 
+                toast.type === 'info' ? 'bg-blue-500 text-white' : 
+                'bg-brand text-surface'
+              }`}
+            >
+              {toast.type === 'error' ? <ShieldCheck size={14} /> : <CheckCircle2 size={14} />}
+              {toast.message}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </ToastContext.Provider>
+  );
+};
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+          const data = await response.json();
+          setUser(data);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Login failed');
+    setUser(data);
+  };
+
+  const signup = async (email: string, password: string, name: string) => {
+    const response = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, name }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Signup failed');
+    setUser(data);
+  };
+
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+    window.location.href = '/login';
+  };
+
+  const updateProfile = async (name: string) => {
+    const response = await fetch('/api/auth/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Update failed');
+    setUser(data);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, updateProfile }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
 
 // --- Mock Data ---
 const CATEGORIES = [
@@ -204,6 +359,11 @@ const MOCK_ORDERS: Order[] = [
     items: [
       { id: '1', name: 'NordVPN Ultra Premium', price: 199.00, quantity: 1, image: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80' },
       { id: '3', name: 'ChatGPT Plus Enterprise', price: 158.00, quantity: 1, image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=800&q=80' }
+    ],
+    timeline: [
+      { date: '2026-03-05T14:20:00Z', status: 'Order Placed', note: 'Transaction initiated via secure gateway.' },
+      { date: '2026-03-05T14:20:30Z', status: 'Processing', note: 'Verifying digital assets and generating unique keys.' },
+      { date: '2026-03-05T14:21:00Z', status: 'Completed', note: 'Keys delivered to the customer archive.' }
     ]
   },
   {
@@ -215,6 +375,10 @@ const MOCK_ORDERS: Order[] = [
     estimatedDelivery: '2026-02-28T09:16:00Z',
     items: [
       { id: '4', name: 'JetBrains Master Suite', price: 88.00, quantity: 1, image: 'https://images.unsplash.com/photo-1587620962725-abab7fe55159?auto=format&fit=crop&w=800&q=80' }
+    ],
+    timeline: [
+      { date: '2026-02-28T09:15:00Z', status: 'Order Placed', note: 'Acquisition started.' },
+      { date: '2026-02-28T09:16:00Z', status: 'Completed', note: 'Master Suite keys issued.' }
     ]
   }
 ];
@@ -338,8 +502,42 @@ const Sidebar = ({ activeCategory, setActiveCategory }: any) => {
 };
 
 const Header = ({ cartCount, onOpenCart, searchQuery, setSearchQuery, cartBump }: any) => {
+  const { scrollY, scrollYProgress } = useScroll();
+  const { user } = useAuth();
+  
+  // Dynamic header styles based on scroll
+  const headerPadding = useTransform(scrollY, [0, 100], ['1.5rem', '0.75rem']);
+  const headerBg = useTransform(
+    scrollY, 
+    [0, 100], 
+    ['rgba(10, 10, 10, 0.8)', 'rgba(10, 10, 10, 0.95)']
+  );
+  const headerBorder = useTransform(
+    scrollY,
+    [0, 100],
+    ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.15)']
+  );
+
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+    restDelta: 0.001
+  });
+
   return (
-    <header className="flex items-center justify-between py-10 px-8 md:px-16">
+    <motion.header 
+      style={{ 
+        paddingTop: headerPadding, 
+        paddingBottom: headerPadding,
+        backgroundColor: headerBg,
+        borderBottomColor: headerBorder
+      }}
+      className="fixed top-0 left-0 right-0 z-[100] flex items-center justify-between px-8 md:px-16 backdrop-blur-xl border-b"
+    >
+      <motion.div 
+        className="absolute top-0 left-0 right-0 h-[1px] bg-brand origin-left z-[110]"
+        style={{ scaleX }}
+      />
       <div className="flex items-center gap-12">
         <div className="hidden md:flex items-center gap-8 text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">
           <Link to="/" className="hover:text-brand transition-colors">Boutique</Link>
@@ -375,11 +573,17 @@ const Header = ({ cartCount, onOpenCart, searchQuery, setSearchQuery, cartBump }
             </span>
           )}
         </button>
-        <Link to="/dashboard" className="px-6 py-2.5 border border-white/10 rounded-full text-[10px] font-bold tracking-widest hover:bg-white hover:text-black transition-all">
-          ACCOUNT
-        </Link>
+        {user ? (
+          <Link to="/dashboard" className="flex items-center gap-3 px-6 py-2.5 border border-white/10 rounded-full text-[10px] font-bold tracking-widest hover:bg-white hover:text-black transition-all">
+            <span className="text-brand uppercase">{user.name || 'Collector'}</span>
+          </Link>
+        ) : (
+          <Link to="/login" className="px-6 py-2.5 bg-brand text-black rounded-full text-[10px] font-black tracking-widest hover:bg-white transition-all">
+            LOGIN
+          </Link>
+        )}
       </div>
-    </header>
+    </motion.header>
   );
 };
 
@@ -411,8 +615,11 @@ const ProductCard = ({ product, addToCart }: { product: Product, addToCart: (p: 
         duration: 0.8, 
         ease: [0.23, 1, 0.32, 1] 
       }}
-      className={`group relative flex flex-col bg-white/[0.01] border border-white/5 hover:bg-white/[0.03] hover:border-brand/30 transition-all duration-700 ${isOutOfStock ? 'opacity-60 grayscale-[0.5]' : ''}`}
+      className={`group relative flex flex-col bg-white/[0.01] border border-white/5 hover:bg-white/[0.03] hover:border-brand/30 transition-all duration-700 overflow-hidden ${isOutOfStock ? 'opacity-60 grayscale-[0.5]' : ''}`}
     >
+      {/* Shimmer Effect */}
+      <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 transition-opacity duration-1000 pointer-events-none" />
+      
       <div className="relative">
         <Link to={`/product/${product.id}`} className="block">
           {/* Image Container with Refined Hover */}
@@ -1153,8 +1360,120 @@ const DashboardSecurity = () => (
   </div>
 );
 
+const DashboardProfile = () => {
+  const { user, updateProfile } = useAuth();
+  const { addToast } = useToast();
+  const [name, setName] = useState(user?.name || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      addToast('Name cannot be empty', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateProfile(name);
+      addToast('Profile updated successfully', 'success');
+    } catch (error: any) {
+      addToast(error.message || 'Failed to update profile', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Profile Header Card */}
+      <div className="bg-white/5 border border-white/10 p-8 rounded-3xl flex flex-col md:flex-row items-center gap-8">
+        <div className="relative group">
+          <div className="w-24 h-24 rounded-full bg-brand/10 border-2 border-brand/20 flex items-center justify-center text-brand font-serif italic text-3xl overflow-hidden">
+            {user?.name?.charAt(0) || user?.email?.charAt(0)}
+          </div>
+          <button className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] font-bold uppercase tracking-widest text-white">
+            Change
+          </button>
+        </div>
+        <div className="text-center md:text-left">
+          <h3 className="text-2xl font-serif italic mb-1">{user?.name || 'Nova Collector'}</h3>
+          <p className="text-xs text-white/40 uppercase tracking-widest mb-4">{user?.email}</p>
+          <div className="flex flex-wrap justify-center md:justify-start gap-3">
+            <span className="px-3 py-1 bg-brand/10 text-brand text-[9px] font-black uppercase tracking-widest rounded-full">Premium Member</span>
+            <span className="px-3 py-1 bg-white/5 text-white/40 text-[9px] font-black uppercase tracking-widest rounded-full">Verified Identity</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white/5 border border-white/10 p-8 rounded-3xl">
+        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/20 mb-8">Identity Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-3">Public Display Name</label>
+              <input 
+                type="text" 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-sm focus:outline-none focus:border-brand transition-all"
+                placeholder="Enter your name"
+              />
+              <p className="text-[9px] text-white/20 mt-2 uppercase tracking-widest italic">This is how you will appear in the Nova archive.</p>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-3">Email Address</label>
+              <input 
+                type="email" 
+                defaultValue={user?.email || ''}
+                disabled
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-sm opacity-50 cursor-not-allowed"
+              />
+              <p className="text-[9px] text-white/20 mt-2 uppercase tracking-widest italic">Primary contact for digital key delivery.</p>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-3">Preferred Language</label>
+              <select className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-sm focus:outline-none focus:border-brand transition-all appearance-none">
+                <option value="zh">简体中文 (Simplified Chinese)</option>
+                <option value="en">English (US)</option>
+                <option value="jp">日本語 (Japanese)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-3">Timezone</label>
+              <select className="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-sm focus:outline-none focus:border-brand transition-all appearance-none">
+                <option value="Asia/Shanghai">Asia/Shanghai (GMT+8)</option>
+                <option value="UTC">UTC (Universal Time)</option>
+                <option value="America/New_York">America/New_York (EST)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div className="mt-12 pt-8 border-t border-white/5 flex justify-end">
+          <button 
+            onClick={handleSave}
+            disabled={saving}
+            className="px-10 py-4 bg-brand text-surface rounded-full text-[10px] font-black tracking-[0.3em] uppercase hover:bg-white transition-all disabled:opacity-50 shadow-xl shadow-brand/10"
+          >
+            {saving ? 'Synchronizing...' : 'Update Identity'}
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-red-500/5 border border-red-500/20 p-8 rounded-3xl">
+        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-red-500 mb-4">Danger Zone</h3>
+        <p className="text-xs text-white/40 mb-8 leading-relaxed">Once you delete your identity, all digital keys, order history, and wallet balance will be permanently purged from the Nova archive.</p>
+        <button className="px-8 py-4 border border-red-500/30 text-red-500 rounded-full text-[10px] font-bold tracking-widest uppercase hover:bg-red-500 hover:text-white transition-all">
+          Purge Identity
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const UserDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
+  const { user, logout } = useAuth();
   
   const tabs = [
     { id: 'overview', label: '概览', icon: LayoutGrid },
@@ -1162,7 +1481,7 @@ const UserDashboard = () => {
     { id: 'wallet', label: '我的钱包', icon: Wallet },
     { id: 'api', label: 'API 对接', icon: Key },
     { id: 'security', label: '安全中心', icon: Shield },
-    { id: 'settings', label: '账户设置', icon: Settings },
+    { id: 'profile', label: '个人资料', icon: User },
   ];
 
   return (
@@ -1181,19 +1500,17 @@ const UserDashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             className="text-5xl md:text-7xl font-serif font-bold italic leading-[0.9]"
           >
-            Welcome, <br /> <span className="gold-gradient">Leo Chen.</span>
+            Welcome, <br /> <span className="gold-gradient">{user?.name || 'Collector'}.</span>
           </motion.h1>
-          <div className="flex items-center gap-6 pb-2">
+            <div className="flex items-center gap-6 pb-2">
             <div className="text-right">
-              <p className="text-xs font-bold text-white uppercase tracking-widest">Premium Member</p>
-              <p className="text-[10px] text-white/30 uppercase tracking-widest">Since Jan 2026</p>
+              <p className="text-xs font-bold text-white uppercase tracking-widest">{user?.name || 'Premium Member'}</p>
+              <p className="text-[10px] text-white/30 uppercase tracking-widest">{user?.email}</p>
             </div>
             <div className="w-16 h-16 rounded-full border-2 border-brand p-1">
-              <img 
-                src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=100&q=80" 
-                className="w-full h-full rounded-full object-cover"
-                referrerPolicy="no-referrer"
-              />
+              <div className="w-full h-full rounded-full bg-brand/20 flex items-center justify-center text-brand font-serif italic text-xl">
+                {user?.name?.charAt(0) || user?.email?.charAt(0)}
+              </div>
             </div>
           </div>
         </div>
@@ -1217,7 +1534,10 @@ const UserDashboard = () => {
             </button>
           ))}
           <div className="pt-8">
-            <button className="w-full flex items-center gap-4 px-6 py-4 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] text-red-500/60 hover:bg-red-500/10 hover:text-red-500 transition-all">
+            <button 
+              onClick={logout}
+              className="w-full flex items-center gap-4 px-6 py-4 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] text-red-500/60 hover:bg-red-500/10 hover:text-red-500 transition-all"
+            >
               <LogOut size={18} />
               退出登录
             </button>
@@ -1239,13 +1559,7 @@ const UserDashboard = () => {
               {activeTab === 'wallet' && <DashboardWallet />}
               {activeTab === 'api' && <DashboardAPI />}
               {activeTab === 'security' && <DashboardSecurity />}
-              {activeTab === 'settings' && (
-                <div className="flex flex-col items-center justify-center py-40 border border-dashed border-white/10 rounded-3xl">
-                  <Settings size={48} className="text-white/10 mb-6" />
-                  <h3 className="text-lg font-serif italic mb-2">账户设置</h3>
-                  <p className="text-xs text-white/30 uppercase tracking-widest">功能开发中...</p>
-                </div>
-              )}
+              {activeTab === 'profile' && <DashboardProfile />}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -1254,19 +1568,57 @@ const UserDashboard = () => {
   );
 };
 
+// --- Components ---
+
+const Skeleton = ({ className }: { className?: string }) => (
+  <div className={`animate-pulse bg-white/5 rounded-lg ${className}`} />
+);
+
+const ProductSkeleton = () => (
+  <div className="flex flex-col gap-4 border border-white/5 p-4">
+    <Skeleton className="aspect-square w-full" />
+    <div className="space-y-2">
+      <Skeleton className="h-4 w-3/4" />
+      <Skeleton className="h-3 w-1/2" />
+    </div>
+    <div className="flex justify-between items-center mt-4">
+      <Skeleton className="h-6 w-20" />
+      <Skeleton className="h-8 w-8 rounded-full" />
+    </div>
+  </div>
+);
+
 const ProductListPage = ({ activeCategory, setActiveCategory, searchQuery, addToCart }: any) => {
+  const [isLoading, setIsLoading] = useState(true);
   const [sortBy, setSortBy] = useState("featured");
+
+  // Simulate initial loading
+  React.useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const isShowingFeaturedSection = activeCategory === "全部商品" && searchQuery === "";
   const featuredProducts = PRODUCTS.filter(p => p.isFeatured);
   
   const filteredProducts = PRODUCTS.filter(p => {
     const matchesCategory = activeCategory === "全部商品" || p.category === activeCategory;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                          p.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch && !p.isFeatured;
+    
+    // Exclude featured products from the main grid if they are already highlighted in the featured section
+    if (isShowingFeaturedSection && p.isFeatured) return false;
+    
+    return matchesCategory && matchesSearch;
   }).sort((a, b) => {
     if (sortBy === "price-low") return a.price - b.price;
     if (sortBy === "price-high") return b.price - a.price;
     if (sortBy === "rating") return b.rating - a.rating;
+    if (sortBy === "featured") {
+      if (a.isFeatured && !b.isFeatured) return -1;
+      if (!a.isFeatured && b.isFeatured) return 1;
+      return 0;
+    }
     return 0;
   });
 
@@ -1315,6 +1667,67 @@ const ProductListPage = ({ activeCategory, setActiveCategory, searchQuery, addTo
           </div>
         </div>
       </section>
+      
+      {/* Featured Bento Grid */}
+      <section className="mb-32">
+        <div className="flex items-center gap-6 mb-12">
+          <h2 className="text-2xl font-serif italic">Featured Collections</h2>
+          <div className="h-[1px] flex-grow bg-white/5" />
+          <span className="text-[9px] font-black tracking-[0.4em] text-white/20 uppercase">Curated Excellence</span>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-6 h-auto md:h-[600px]">
+          {/* Large Main Feature */}
+          <motion.div 
+            whileHover={{ scale: 0.99 }}
+            className="md:col-span-2 lg:col-span-3 md:row-span-2 relative group overflow-hidden rounded-3xl border border-white/5"
+          >
+            <img src="https://images.unsplash.com/photo-1614850523296-d8c1af93d400?auto=format&fit=crop&w=800&q=80" className="w-full h-full object-cover opacity-40 group-hover:opacity-60 group-hover:scale-105 transition-all duration-1000" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+            <div className="absolute bottom-8 left-8">
+              <span className="text-[8px] font-black tracking-[0.3em] text-brand uppercase mb-2 block">Premium Access</span>
+              <h3 className="text-3xl font-serif italic mb-4">Software <br />Master Suite</h3>
+              <button className="px-6 py-2 border border-white/20 rounded-full text-[9px] font-bold tracking-widest uppercase hover:bg-white hover:text-black transition-all">Explore</button>
+            </div>
+          </motion.div>
+
+          {/* Medium Feature 1 */}
+          <motion.div 
+            whileHover={{ scale: 0.99 }}
+            className="md:col-span-2 lg:col-span-3 relative group overflow-hidden rounded-3xl border border-white/5"
+          >
+            <img src="https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=800&q=80" className="w-full h-full object-cover opacity-30 group-hover:opacity-50 group-hover:scale-105 transition-all duration-1000" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent" />
+            <div className="absolute inset-y-0 left-8 flex flex-col justify-center">
+              <span className="text-[8px] font-black tracking-[0.3em] text-brand uppercase mb-2 block">Gaming</span>
+              <h3 className="text-xl font-serif italic">Digital <br />Vault</h3>
+            </div>
+          </motion.div>
+
+          {/* Small Feature 1 */}
+          <motion.div 
+            whileHover={{ scale: 0.99 }}
+            className="md:col-span-1 lg:col-span-1 relative group overflow-hidden rounded-3xl border border-white/5"
+          >
+            <div className="absolute inset-0 bg-brand/5 group-hover:bg-brand/10 transition-colors" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+              <ShieldCheck className="text-brand mb-3" size={24} />
+              <h3 className="text-[10px] font-bold uppercase tracking-widest">Verified <br />Secure</h3>
+            </div>
+          </motion.div>
+
+          {/* Small Feature 2 */}
+          <motion.div 
+            whileHover={{ scale: 0.99 }}
+            className="md:col-span-1 lg:col-span-2 relative group overflow-hidden rounded-3xl border border-white/5"
+          >
+            <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=80" className="w-full h-full object-cover opacity-20 group-hover:opacity-40 group-hover:scale-105 transition-all duration-1000" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <h3 className="text-sm font-serif italic">Global Network</h3>
+            </div>
+          </motion.div>
+        </div>
+      </section>
 
       {/* Featured Products Section */}
       {activeCategory === "全部商品" && searchQuery === "" && (
@@ -1325,9 +1738,15 @@ const ProductListPage = ({ activeCategory, setActiveCategory, searchQuery, addTo
             <span className="text-[9px] font-black tracking-[0.4em] text-white/20 uppercase">Curated Excellence</span>
           </div>
           <div className="grid grid-cols-1 gap-8">
-            {featuredProducts.map(product => (
-              <FeaturedProductCard key={product.id} product={product} addToCart={addToCart} />
-            ))}
+            {isLoading ? (
+              [1, 2].map(i => (
+                <div key={i} className="h-64 glass-panel rounded-3xl animate-pulse" />
+              ))
+            ) : (
+              featuredProducts.map(product => (
+                <FeaturedProductCard key={product.id} product={product} addToCart={addToCart} />
+              ))
+            )}
           </div>
         </section>
       )}
@@ -1343,22 +1762,25 @@ const ProductListPage = ({ activeCategory, setActiveCategory, searchQuery, addTo
         <div className="flex items-baseline gap-6">
           <h2 className="text-3xl font-serif italic">{activeCategory}</h2>
           <span className="text-[10px] font-bold text-white/20 tracking-widest uppercase">
-            {filteredProducts.length} ITEMS AVAILABLE
+            {isLoading ? "SCANNING DATABASE..." : `${filteredProducts.length} ITEMS AVAILABLE`}
           </span>
         </div>
-        <div className="flex gap-3">
-          <select 
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="bg-transparent border border-white/10 rounded-full px-5 py-2.5 text-[9px] font-bold tracking-widest focus:outline-none focus:border-brand transition-all appearance-none cursor-pointer"
-          >
-            <option value="featured" className="bg-surface">SORT: FEATURED</option>
-            <option value="price-low" className="bg-surface">PRICE: LOW TO HIGH</option>
-            <option value="price-high" className="bg-surface">PRICE: HIGH TO LOW</option>
-            <option value="rating" className="bg-surface">RATING: HIGHEST</option>
-          </select>
-          <button className="flex items-center gap-2 px-5 py-2.5 border border-white/10 rounded-full text-[9px] font-bold tracking-widest hover:border-brand transition-all">
-            <Filter size={12} /> FILTER
+        <div className="flex gap-3 relative">
+          <div className="relative">
+            <select 
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-full pl-5 pr-10 py-2.5 text-[9px] font-black tracking-widest focus:outline-none focus:border-brand transition-all appearance-none cursor-pointer uppercase"
+            >
+              <option value="featured" className="bg-neutral-900">Sort: Featured</option>
+              <option value="price-low" className="bg-neutral-900">Price: Low to High</option>
+              <option value="price-high" className="bg-neutral-900">Price: High to Low</option>
+              <option value="rating" className="bg-neutral-900">Rating: Highest</option>
+            </select>
+            <ChevronDown size={12} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/40" />
+          </div>
+          <button className="flex items-center gap-2 px-5 py-2.5 border border-white/10 rounded-full text-[9px] font-black tracking-widest hover:border-brand transition-all uppercase">
+            <Filter size={12} /> Filter
           </button>
         </div>
       </motion.section>
@@ -1369,7 +1791,11 @@ const ProductListPage = ({ activeCategory, setActiveCategory, searchQuery, addTo
         className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 min-h-[400px]"
       >
         <AnimatePresence mode='popLayout'>
-          {filteredProducts.length > 0 ? (
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, i) => (
+              <ProductSkeleton key={i} />
+            ))
+          ) : filteredProducts.length > 0 ? (
             filteredProducts.map((product) => (
               <ProductCard key={product.id} product={product} addToCart={addToCart} />
             ))
@@ -1757,6 +2183,22 @@ const CheckoutPage = ({ cart }: { cart: CartItem[] }) => {
   const fee = subtotal > 0 ? 5 : 0;
   const total = subtotal + fee;
 
+  const [captchaVerified, setCaptchaVerified] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleCheckout = () => {
+    if (!captchaVerified) {
+      alert('Please complete the human verification.');
+      return;
+    }
+    setIsProcessing(true);
+    setTimeout(() => {
+      setIsProcessing(false);
+      alert('Order placed successfully! Redirecting to confirmation...');
+      window.location.href = '/lookup';
+    }, 2000);
+  };
+
   return (
     <div className="px-8 md:px-16 py-24 max-w-6xl mx-auto">
       <div className="text-center mb-16">
@@ -1803,7 +2245,12 @@ const CheckoutPage = ({ cart }: { cart: CartItem[] }) => {
           </div>
 
           <div className="space-y-6">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-brand">03. Review Collection</h2>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-brand">03. Verification</h2>
+            <LuxuryCaptcha onVerify={setCaptchaVerified} />
+          </div>
+
+          <div className="space-y-6">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-brand">04. Review Collection</h2>
             <div className="space-y-4">
               {cart.map(item => (
                 <div key={item.id} className="flex items-center gap-6 p-4 bg-white/[0.01] border border-white/5 rounded-xl">
@@ -1841,8 +2288,12 @@ const CheckoutPage = ({ cart }: { cart: CartItem[] }) => {
                 <span className="text-3xl font-display font-light gold-gradient">¥{total.toLocaleString()}</span>
               </div>
             </div>
-            <button className="w-full py-5 bg-brand text-surface text-[10px] font-black tracking-[0.4em] uppercase hover:bg-white transition-all shadow-2xl shadow-brand/20">
-              Complete Acquisition
+            <button 
+              onClick={handleCheckout}
+              disabled={isProcessing || !captchaVerified}
+              className="w-full py-5 bg-brand text-surface text-[10px] font-black tracking-[0.4em] uppercase hover:bg-white transition-all shadow-2xl shadow-brand/20 disabled:opacity-50"
+            >
+              {isProcessing ? 'Processing...' : 'Complete Acquisition'}
             </button>
             <div className="flex flex-col items-center gap-4 pt-4">
               <div className="flex items-center gap-2 text-[8px] font-bold text-white/20 uppercase tracking-widest">
@@ -1859,28 +2310,100 @@ const CheckoutPage = ({ cart }: { cart: CartItem[] }) => {
   );
 };
 
+const LuxuryCaptcha = ({ onVerify }: { onVerify: (valid: boolean) => void }) => {
+  const [sliderPos, setSliderPos] = useState(0);
+  const [isVerified, setIsVerified] = useState(false);
+  const targetPos = 85; // Target position percentage
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value);
+    setSliderPos(val);
+    if (Math.abs(val - targetPos) < 5) {
+      setIsVerified(true);
+      onVerify(true);
+    } else {
+      setIsVerified(false);
+      onVerify(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 p-6 bg-white/[0.02] border border-white/5 rounded-2xl">
+      <div className="flex justify-between items-center mb-2">
+        <p className="text-[9px] font-black text-white/20 uppercase tracking-widest">Human Verification</p>
+        {isVerified && <span className="text-[9px] font-bold text-brand uppercase tracking-widest flex items-center gap-1"><CheckCircle2 size={10} /> Verified</span>}
+      </div>
+      <div className="relative h-12 bg-black/40 rounded-full border border-white/5 flex items-center px-2">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <p className="text-[8px] font-bold text-white/10 uppercase tracking-[0.3em]">Slide to the Golden Mark</p>
+        </div>
+        <div 
+          className="absolute h-8 w-1 bg-brand/30 rounded-full" 
+          style={{ left: `${targetPos}%` }}
+        />
+        <input 
+          type="range" 
+          min="0" 
+          max="100" 
+          value={sliderPos} 
+          onChange={handleSliderChange}
+          className="w-full appearance-none bg-transparent cursor-pointer relative z-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-brand [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-brand/20 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-surface"
+        />
+      </div>
+    </div>
+  );
+};
+
 const OrderLookupPage = () => {
   const [orderId, setOrderId] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [searching, setSearching] = useState(false);
   const [result, setResult] = useState<Order | null>(null);
+  const [captchaVerified, setCaptchaVerified] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoverySent, setRecoverySent] = useState(false);
+  const { addToast } = useToast();
 
-  const handleLookup = (e: React.FormEvent) => {
+  const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!captchaVerified) {
+      addToast('Please complete the human verification.', 'info');
+      return;
+    }
     setSearching(true);
-    // Simulate API call
-    setTimeout(() => {
-      setSearching(false);
-      // Check for Order ID + (Email OR Password)
-      const foundOrder = MOCK_ORDERS.find(o => o.id === orderId);
-      
-      if (foundOrder && (email === 'guest@example.com' || password === '123456')) {
-        setResult(foundOrder);
+    
+    try {
+      const response = await fetch('/api/order-lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setResult(data);
+        addToast('Order located successfully', 'success');
       } else {
         setResult(null);
-        alert('No order found with these credentials. Please check your Order ID and Email/Password.');
+        addToast(data.error || 'No order found with these credentials.', 'error');
       }
+    } catch (error) {
+      console.error('Lookup error:', error);
+      addToast('A security or network error occurred.', 'error');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleRecovery = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSearching(true);
+    setTimeout(() => {
+      setSearching(false);
+      setRecoverySent(true);
     }, 1500);
   };
 
@@ -1897,51 +2420,114 @@ const OrderLookupPage = () => {
 
       {!result ? (
         <div className="bg-white/[0.02] border border-white/5 p-8 md:p-12 rounded-3xl">
-          <form onSubmit={handleLookup} className="space-y-8">
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-white/20 uppercase tracking-widest">Order ID</label>
-                <input 
-                  type="text" 
-                  value={orderId}
-                  onChange={(e) => setOrderId(e.target.value)}
-                  placeholder="e.g., ORD-2026-8842" 
-                  className="w-full bg-transparent border-b border-white/10 py-4 text-sm focus:outline-none focus:border-brand transition-colors"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {!showRecovery ? (
+            <form onSubmit={handleLookup} className="space-y-8">
+              <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-white/20 uppercase tracking-widest">Email Address</label>
+                  <label className="text-[10px] font-black text-white/20 uppercase tracking-widest">Order ID</label>
                   <input 
-                    type="email" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Email used for checkout" 
+                    type="text" 
+                    value={orderId}
+                    onChange={(e) => setOrderId(e.target.value)}
+                    placeholder="e.g., ORD-2026-8842" 
                     className="w-full bg-transparent border-b border-white/10 py-4 text-sm focus:outline-none focus:border-brand transition-colors"
+                    required
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-white/20 uppercase tracking-widest">Order Password</label>
-                  <input 
-                    type="password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Your inquiry password" 
-                    className="w-full bg-transparent border-b border-white/10 py-4 text-sm focus:outline-none focus:border-brand transition-colors"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-white/20 uppercase tracking-widest">Email Address</label>
+                    <input 
+                      type="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Email used for checkout" 
+                      className="w-full bg-transparent border-b border-white/10 py-4 text-sm focus:outline-none focus:border-brand transition-colors"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-black text-white/20 uppercase tracking-widest">Order Password</label>
+                      <button 
+                        type="button"
+                        onClick={() => setShowRecovery(true)}
+                        className="text-[8px] font-bold text-brand hover:underline uppercase tracking-widest"
+                      >
+                        Forgot?
+                      </button>
+                    </div>
+                    <input 
+                      type="password" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Your inquiry password" 
+                      className="w-full bg-transparent border-b border-white/10 py-4 text-sm focus:outline-none focus:border-brand transition-colors"
+                    />
+                  </div>
                 </div>
+                <p className="text-[9px] text-white/10 uppercase tracking-widest text-center">Provide your Order ID and either your email or password to verify.</p>
               </div>
-              <p className="text-[9px] text-white/10 uppercase tracking-widest text-center">Provide your Order ID and either your email or password to verify.</p>
+
+              <LuxuryCaptcha onVerify={setCaptchaVerified} />
+
+              <button 
+                type="submit"
+                disabled={searching || !captchaVerified}
+                className="w-full py-5 bg-brand text-surface text-[10px] font-black tracking-[0.4em] uppercase hover:bg-white transition-all disabled:opacity-50 shadow-xl shadow-brand/10"
+              >
+                {searching ? 'Verifying Archive...' : 'Locate Order'}
+              </button>
+            </form>
+          ) : (
+            <div className="space-y-8">
+              <div className="flex items-center gap-4 mb-4">
+                <button onClick={() => setShowRecovery(false)} className="text-white/40 hover:text-white transition-colors">
+                  <ArrowLeft size={20} />
+                </button>
+                <h2 className="text-xl font-serif italic">Password Recovery</h2>
+              </div>
+              
+              {!recoverySent ? (
+                <form onSubmit={handleRecovery} className="space-y-6">
+                  <p className="text-xs text-white/40 leading-relaxed">Enter the email address associated with your order. We will send a secure link to reset your inquiry password.</p>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-white/20 uppercase tracking-widest">Recovery Email</label>
+                    <input 
+                      type="email" 
+                      value={recoveryEmail}
+                      onChange={(e) => setRecoveryEmail(e.target.value)}
+                      placeholder="Enter your email" 
+                      className="w-full bg-transparent border-b border-white/10 py-4 text-sm focus:outline-none focus:border-brand transition-colors"
+                      required
+                    />
+                  </div>
+                  <button 
+                    type="submit"
+                    disabled={searching}
+                    className="w-full py-5 bg-brand text-surface text-[10px] font-black tracking-[0.4em] uppercase hover:bg-white transition-all disabled:opacity-50"
+                  >
+                    {searching ? 'Sending Link...' : 'Send Recovery Link'}
+                  </button>
+                </form>
+              ) : (
+                <div className="text-center py-12 space-y-6">
+                  <div className="w-16 h-16 bg-brand/10 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle2 size={32} className="text-brand" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-serif italic mb-2">Recovery Link Sent</h3>
+                    <p className="text-xs text-white/30 leading-relaxed">If an order exists for <span className="text-white">{recoveryEmail}</span>, you will receive a reset link shortly.</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowRecovery(false)}
+                    className="text-[10px] font-bold text-brand hover:underline uppercase tracking-widest"
+                  >
+                    Return to Lookup
+                  </button>
+                </div>
+              )}
             </div>
-            <button 
-              type="submit"
-              disabled={searching}
-              className="w-full py-5 bg-brand text-surface text-[10px] font-black tracking-[0.4em] uppercase hover:bg-white transition-all disabled:opacity-50"
-            >
-              {searching ? 'Verifying Archive...' : 'Locate Order'}
-            </button>
-          </form>
+          )}
           <div className="mt-12 pt-8 border-t border-white/5 text-center">
             <p className="text-[10px] text-white/20 uppercase tracking-widest leading-relaxed">
               Members can view their full history in the <Link to="/orders" className="text-brand hover:underline">Personal Archive</Link>
@@ -1979,15 +2565,27 @@ const OrderLookupPage = () => {
                   </div>
                 )}
               </div>
-              {result.statusDescription && (
-                <div className="mt-6 pt-6 border-t border-white/5">
-                  <p className="text-[10px] text-white/40 italic leading-relaxed">
-                    <span className="text-brand not-italic font-bold uppercase mr-2 tracking-widest">Update:</span>
-                    {result.statusDescription}
-                  </p>
-                </div>
-              )}
             </div>
+
+            {result.timeline && (
+              <div className="p-8 border-b border-white/5 bg-black/20">
+                <h3 className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-8">Order Timeline</h3>
+                <div className="space-y-8 relative before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-[1px] before:bg-white/5">
+                  {result.timeline.map((update, idx) => (
+                    <div key={idx} className="relative pl-8 group">
+                      <div className={`absolute left-0 top-1.5 w-4 h-4 rounded-full border-2 border-surface z-10 transition-colors ${
+                        idx === result.timeline!.length - 1 ? 'bg-brand' : 'bg-white/10 group-hover:bg-brand/50'
+                      }`} />
+                      <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-2">
+                        <h4 className="text-xs font-bold text-white/80 uppercase tracking-widest">{update.status}</h4>
+                        <span className="text-[9px] font-mono text-white/20">{new Date(update.date).toLocaleString()}</span>
+                      </div>
+                      <p className="text-[10px] text-white/40 mt-1 leading-relaxed italic">{update.note}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="p-8 space-y-6">
               {result.items.map(item => (
                 <div key={item.id} className="flex items-center gap-6">
@@ -2011,7 +2609,220 @@ const OrderLookupPage = () => {
   );
 };
 
+const LoginPage = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const { addToast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await login(email, password);
+      addToast('Welcome back, Collector', 'success');
+      window.location.href = '/';
+    } catch (err: any) {
+      setError(err.message);
+      addToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-md mx-auto py-20 px-6"
+    >
+      <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8 md:p-12">
+        <h1 className="text-3xl font-serif italic mb-8">Access Archive</h1>
+        {error && <p className="text-red-500 text-xs mb-6 uppercase tracking-widest">{error}</p>}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2">Email Address</label>
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand transition-colors"
+              placeholder="name@example.com"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2">Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand transition-colors"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full py-4 bg-brand text-black font-black uppercase tracking-[0.2em] text-xs rounded-xl hover:bg-white transition-all disabled:opacity-50"
+          >
+            {loading ? 'Verifying...' : 'Authorize Access'}
+          </button>
+        </form>
+        <p className="mt-8 text-center text-[10px] text-white/40 uppercase tracking-widest">
+          New to Nova? <Link to="/signup" className="text-brand hover:underline">Create Identity</Link>
+        </p>
+      </div>
+    </motion.div>
+  );
+};
+
+const SignupPage = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { signup } = useAuth();
+  const { addToast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await signup(email, password, name);
+      addToast('Identity created successfully', 'success');
+      window.location.href = '/';
+    } catch (err: any) {
+      setError(err.message);
+      addToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-md mx-auto py-20 px-6"
+    >
+      <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8 md:p-12">
+        <h1 className="text-3xl font-serif italic mb-8">Create Identity</h1>
+        {error && <p className="text-red-500 text-xs mb-6 uppercase tracking-widest">{error}</p>}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2">Full Name</label>
+            <input 
+              type="text" 
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand transition-colors"
+              placeholder="John Doe"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2">Email Address</label>
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand transition-colors"
+              placeholder="name@example.com"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-white/40 mb-2">Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand transition-colors"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full py-4 bg-brand text-black font-black uppercase tracking-[0.2em] text-xs rounded-xl hover:bg-white transition-all disabled:opacity-50"
+          >
+            {loading ? 'Initializing...' : 'Initialize Identity'}
+          </button>
+        </form>
+        <p className="mt-8 text-center text-[10px] text-white/40 uppercase tracking-widest">
+          Already have an identity? <Link to="/login" className="text-brand hover:underline">Access Archive</Link>
+        </p>
+      </div>
+    </motion.div>
+  );
+};
 const OrderHistoryPage = () => {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedOrders, setExpandedOrders] = useState<string[]>([]);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const response = await fetch('/api/orders');
+        if (response.ok) {
+          const data = await response.json();
+          setOrders(data);
+        }
+      } catch (error) {
+        console.error('Fetch orders error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchOrders();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const toggleOrder = (orderId: string) => {
+    setExpandedOrders(prev => 
+      prev.includes(orderId) 
+        ? prev.filter(id => id !== orderId) 
+        : [...prev, orderId]
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="px-8 md:px-16 py-40 flex flex-col items-center justify-center">
+        <div className="w-12 h-12 border-2 border-brand border-t-transparent rounded-full animate-spin mb-6" />
+        <p className="text-[10px] font-black tracking-[0.4em] text-white/20 uppercase">Accessing Archives...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="px-8 md:px-16 py-40">
+        <EmptyState 
+          icon={Lock}
+          title="Archive Locked"
+          description="Please authorize your identity to access your personal acquisition history."
+          actionText="Authorize Access"
+          onAction={() => window.location.href = '/login'}
+        />
+      </div>
+    );
+  }
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -2024,68 +2835,116 @@ const OrderHistoryPage = () => {
       </div>
 
       <div className="space-y-8">
-        {MOCK_ORDERS.length > 0 ? (
-          MOCK_ORDERS.map((order) => (
-            <div key={order.id} className="bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden">
-              <div className="p-6 md:p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="flex flex-wrap gap-8">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Order ID</span>
-                    <span className="text-xs font-mono text-white/60">{order.id}</span>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Date</span>
-                    <span className="text-xs text-white/60">{new Date(order.date).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Total Amount</span>
-                    <span className="text-xs font-display gold-gradient">¥{order.total.toLocaleString()}</span>
-                  </div>
-                  {order.estimatedDelivery && (
+        {orders.length > 0 ? (
+          orders.map((order) => {
+            const isExpanded = expandedOrders.includes(order.id);
+            
+            return (
+              <div key={order.id} className="bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden">
+                <div className="p-6 md:p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="flex flex-wrap gap-8">
                     <div className="flex flex-col gap-1">
-                      <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Est. Delivery</span>
-                      <span className="text-xs text-brand">{new Date(order.estimatedDelivery).toLocaleString()}</span>
+                      <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Order ID</span>
+                      <span className="text-xs font-mono text-white/60">{order.id}</span>
                     </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Date</span>
+                      <span className="text-xs text-white/60">{new Date(order.date).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Total Amount</span>
+                      <span className="text-xs font-display gold-gradient">¥{order.total.toLocaleString()}</span>
+                    </div>
+                    {order.estimatedDelivery && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Est. Delivery</span>
+                        <span className="text-xs text-brand">{new Date(order.estimatedDelivery).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${
+                      order.status === 'completed' ? 'border-emerald-500/20 text-emerald-500 bg-emerald-500/5' :
+                      order.status === 'processing' ? 'border-amber-500/20 text-amber-500 bg-amber-500/5' :
+                      'border-red-500/20 text-red-500 bg-red-500/5'
+                    }`}>
+                      {order.status}
+                    </span>
+                    <button 
+                      onClick={() => toggleOrder(order.id)}
+                      className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-[9px] font-bold tracking-widest uppercase transition-all flex items-center gap-2"
+                    >
+                      {isExpanded ? 'Hide Details' : 'View Details'}
+                      <motion.div
+                        animate={{ rotate: isExpanded ? 180 : 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <ChevronDown size={14} />
+                      </motion.div>
+                    </button>
+                  </div>
+                </div>
+
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+                      className="overflow-hidden"
+                    >
+                      {order.statusDescription && (
+                        <div className="px-6 md:px-8 py-4 bg-white/[0.01] border-b border-white/5">
+                          <p className="text-[10px] text-white/40 italic leading-relaxed">
+                            <span className="text-brand not-italic font-bold uppercase mr-2 tracking-widest">Update:</span>
+                            {order.statusDescription}
+                          </p>
+                        </div>
+                      )}
+
+                      {order.timeline && (
+                        <div className="px-6 md:px-8 py-8 border-b border-white/5 bg-black/10">
+                          <h3 className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-6">Order Timeline</h3>
+                          <div className="space-y-6 relative before:absolute before:left-[5px] before:top-2 before:bottom-2 before:w-[1px] before:bg-white/5">
+                            {order.timeline.map((update, idx) => (
+                              <div key={idx} className="relative pl-6 group">
+                                <div className={`absolute left-0 top-1.5 w-2.5 h-2.5 rounded-full border border-surface z-10 transition-colors ${
+                                  idx === order.timeline!.length - 1 ? 'bg-brand' : 'bg-white/10'
+                                }`} />
+                                <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-1">
+                                  <h4 className="text-[10px] font-bold text-white/70 uppercase tracking-widest">{update.status}</h4>
+                                  <span className="text-[8px] font-mono text-white/10">{new Date(update.date).toLocaleString()}</span>
+                                </div>
+                                <p className="text-[9px] text-white/30 mt-1 leading-relaxed italic">{update.note}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="p-6 md:p-8 bg-black/20">
+                        <h3 className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-6">Acquired Items</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {order.items.map((item) => (
+                            <div key={item.id} className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-neutral-900 rounded border border-white/5 overflow-hidden">
+                                <img src={item.image} alt={item.name} className="w-full h-full object-cover opacity-60" />
+                              </div>
+                              <div>
+                                <h4 className="text-[11px] font-serif italic">{item.name}</h4>
+                                <p className="text-[9px] text-white/20 uppercase tracking-widest">Qty: {item.quantity} — ¥{item.price.toLocaleString()}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
                   )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${
-                    order.status === 'completed' ? 'border-emerald-500/20 text-emerald-500 bg-emerald-500/5' :
-                    order.status === 'processing' ? 'border-amber-500/20 text-amber-500 bg-amber-500/5' :
-                    'border-red-500/20 text-red-500 bg-red-500/5'
-                  }`}>
-                    {order.status}
-                  </span>
-                  <button className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-[9px] font-bold tracking-widest uppercase transition-all">
-                    View Details
-                  </button>
-                </div>
+                </AnimatePresence>
               </div>
-              {order.statusDescription && (
-                <div className="px-6 md:px-8 py-4 bg-white/[0.01] border-b border-white/5">
-                  <p className="text-[10px] text-white/40 italic leading-relaxed">
-                    <span className="text-brand not-italic font-bold uppercase mr-2 tracking-widest">Update:</span>
-                    {order.statusDescription}
-                  </p>
-                </div>
-              )}
-              <div className="p-6 md:p-8 bg-black/20">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {order.items.map((item) => (
-                    <div key={item.id} className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-neutral-900 rounded border border-white/5 overflow-hidden">
-                        <img src={item.image} alt={item.name} className="w-full h-full object-cover opacity-60" />
-                      </div>
-                      <div>
-                        <h4 className="text-[11px] font-serif italic">{item.name}</h4>
-                        <p className="text-[9px] text-white/20 uppercase tracking-widest">Qty: {item.quantity} — ¥{item.price.toLocaleString()}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="py-20 bg-white/[0.01] border border-white/5 rounded-3xl">
             <EmptyState 
@@ -2154,16 +3013,9 @@ export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [toasts, setToasts] = useState<{ id: number, message: string }[]>([]);
   const [cartBump, setCartBump] = useState(false);
-
-  const addToast = (message: string) => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3000);
-  };
+  const { user, logout } = useAuth();
+  const { addToast } = useToast();
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -2175,7 +3027,7 @@ export default function App() {
       }
       return [...prev, { ...product, quantity: 1 }];
     });
-    addToast(`${product.name} added to collection`);
+    addToast(`${product.name} added to collection`, 'success');
     setCartBump(true);
     setTimeout(() => setCartBump(false), 300);
     setCartOpen(true);
@@ -2199,7 +3051,7 @@ export default function App() {
       <div className="flex min-h-screen selection:bg-brand selection:text-surface">
         <Sidebar activeCategory={activeCategory} setActiveCategory={setActiveCategory} />
         
-        <main className="flex-grow flex flex-col">
+        <main className="flex-grow flex flex-col pt-32">
           <Header 
             cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} 
             onOpenCart={() => setCartOpen(true)}
@@ -2220,10 +3072,12 @@ export default function App() {
             <Route path="/product/:id" element={<ProductDetailPage addToCart={addToCart} />} />
             <Route path="/news" element={<NewsPage />} />
             <Route path="/news/:id" element={<NewsDetailPage />} />
-            <Route path="/dashboard" element={<UserDashboard />} />
+            <Route path="/dashboard" element={user ? <UserDashboard /> : <Navigate to="/login" />} />
             <Route path="/checkout" element={<CheckoutPage cart={cart} />} />
             <Route path="/orders" element={<OrderHistoryPage />} />
             <Route path="/lookup" element={<OrderLookupPage />} />
+            <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <LoginPage />} />
+            <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <SignupPage />} />
           </Routes>
 
           {/* Minimal Footer */}
@@ -2340,15 +3194,37 @@ export default function App() {
                 </nav>
 
                 <motion.div variants={menuItemVariants} className="mt-auto pt-8 border-t border-white/5">
-                  <div className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl">
-                    <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center text-brand">
-                      <User size={20} />
+                  {user ? (
+                    <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center text-brand font-serif italic">
+                          {user.name?.charAt(0) || user.email.charAt(0)}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">Logged in as</span>
+                          <span className="text-xs font-bold">{user.name || 'Nova Collector'}</span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          logout();
+                          setMobileMenuOpen(false);
+                        }}
+                        className="p-2 text-white/20 hover:text-red-500 transition-colors"
+                      >
+                        <LogOut size={16} />
+                      </button>
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">Logged in as</span>
-                      <span className="text-xs font-bold">Nova Collector</span>
-                    </div>
-                  </div>
+                  ) : (
+                    <Link 
+                      to="/login" 
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full py-4 bg-brand text-black rounded-xl text-[10px] font-black tracking-widest uppercase flex items-center justify-center gap-2"
+                    >
+                      <User size={16} />
+                      Authorize Access
+                    </Link>
+                  )}
                 </motion.div>
               </motion.aside>
             </>
@@ -2362,24 +3238,6 @@ export default function App() {
           updateQuantity={updateQuantity}
           removeFromCart={removeFromCart}
         />
-
-        {/* Toast Notifications */}
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-3 items-center pointer-events-none">
-          <AnimatePresence>
-            {toasts.map(toast => (
-              <motion.div
-                key={toast.id}
-                initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-brand text-surface px-6 py-3 rounded-full text-[10px] font-black tracking-widest uppercase shadow-2xl flex items-center gap-3"
-              >
-                <CheckCircle2 size={14} />
-                {toast.message}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
       </div>
     </Router>
   );
