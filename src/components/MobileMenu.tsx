@@ -6,10 +6,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../utils/api';
 import { Category } from '../types';
 import { useSite } from '../contexts/SiteContext';
+import { getLocalizedString } from '../utils/mapper';
 
 export const MobileMenu = ({ isOpen, onClose, activeCategory, setActiveCategory }: any) => {
   const { user, logout } = useAuth();
-  const { getLocalizedString } = useSite();
+  const { locale } = useSite();
   const [categories, setCategories] = useState<{name: string, count?: number}[]>([
     { name: 'All Products' }
   ]);
@@ -19,7 +20,7 @@ export const MobileMenu = ({ isOpen, onClose, activeCategory, setActiveCategory 
       try {
         const res = await api.get<Category[]>('/public/categories');
         const mappedCategories = res.data.map(c => ({
-          name: getLocalizedString(c.name)
+          name: getLocalizedString(c.name, locale)
         }));
         setCategories([{ name: 'All Products' }, ...mappedCategories]);
       } catch (error) {
@@ -27,7 +28,7 @@ export const MobileMenu = ({ isOpen, onClose, activeCategory, setActiveCategory 
       }
     };
     fetchCategories();
-  }, [getLocalizedString]);
+  }, [locale]);
 
   const menuVariants = {
     closed: { x: "-100%", transition: { type: "spring", stiffness: 400, damping: 40 } },

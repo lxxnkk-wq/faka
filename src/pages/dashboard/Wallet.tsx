@@ -1,18 +1,34 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Wallet, Plus } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
 import { useSite } from '../../contexts/SiteContext';
+import { api } from '../../utils/api';
+import { WalletAccountData } from '../../types';
+import { formatCurrencyAmount } from '../../utils/mapper';
 
 export const DashboardWallet = () => {
-  const { user } = useAuth();
   const { config } = useSite();
+  const [balance, setBalance] = useState('0.00');
+
+  useEffect(() => {
+    const fetchWallet = async () => {
+      try {
+        const response = await api.get<WalletAccountData>('/wallet');
+        setBalance(response.data.balance || '0.00');
+      } catch (error) {
+        console.error('Fetch wallet error:', error);
+        setBalance('0.00');
+      }
+    };
+
+    fetchWallet();
+  }, []);
 
   return (
     <div className="space-y-8">
       <div className="bg-brand p-10 rounded-3xl text-surface relative overflow-hidden">
         <div className="relative z-10">
           <p className="text-[10px] font-black tracking-[0.4em] uppercase mb-2 opacity-60">Available Balance</p>
-          <h2 className="text-5xl font-serif font-bold italic mb-8">{config?.currency} {user?.balance || '0.00'}</h2>
+          <h2 className="text-5xl font-serif font-bold italic mb-8">{formatCurrencyAmount(config?.currency || '$', balance)}</h2>
           <div className="flex gap-4">
             <button className="px-8 py-3 bg-surface text-white rounded-full text-[10px] font-bold tracking-widest uppercase hover:bg-black transition-all">Top Up</button>
             <button className="px-8 py-3 border border-surface/20 rounded-full text-[10px] font-bold tracking-widest uppercase hover:bg-surface/10 transition-all">Withdraw</button>
@@ -42,15 +58,15 @@ export const DashboardWallet = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-xs text-white/40">This Month's Spending</span>
-              <span className="text-xs font-mono">{config?.currency} 0.00</span>
+              <span className="text-xs font-mono">{formatCurrencyAmount(config?.currency || '$', '0.00')}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-xs text-white/40">This Month's Top Up</span>
-              <span className="text-xs font-mono">{config?.currency} 0.00</span>
+              <span className="text-xs font-mono">{formatCurrencyAmount(config?.currency || '$', '0.00')}</span>
             </div>
             <div className="pt-4 border-t border-white/5 flex justify-between items-center">
               <span className="text-xs font-bold">Pending Refunds</span>
-              <span className="text-xs font-mono text-brand">{config?.currency} 0.00</span>
+              <span className="text-xs font-mono text-brand">{formatCurrencyAmount(config?.currency || '$', '0.00')}</span>
             </div>
           </div>
         </div>

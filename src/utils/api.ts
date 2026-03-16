@@ -38,6 +38,10 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
+  const locale = localStorage.getItem('locale');
+  if (locale) {
+    headers.set('X-Lang', locale);
+  }
 
   const response = await fetch(url, {
     ...options,
@@ -54,6 +58,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   if (data.status_code !== 0) {
+    if (data.status_code === 401) {
+      localStorage.removeItem('token');
+    }
     throw new ApiError(data.msg || 'An error occurred', data.status_code, data.data);
   }
 

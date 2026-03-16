@@ -4,9 +4,10 @@ import { Zap, LayoutGrid, Search, History, HelpCircle, User } from 'lucide-react
 import { api } from '../utils/api';
 import { Category } from '../types';
 import { useSite } from '../contexts/SiteContext';
+import { getLocalizedString } from '../utils/mapper';
 
 export const Sidebar = ({ activeCategory, setActiveCategory }: any) => {
-  const { getLocalizedString } = useSite();
+  const { locale } = useSite();
   const [categories, setCategories] = useState<{name: string, count?: number}[]>([
     { name: 'All Products' }
   ]);
@@ -16,7 +17,7 @@ export const Sidebar = ({ activeCategory, setActiveCategory }: any) => {
       try {
         const res = await api.get<Category[]>('/public/categories');
         const mappedCategories = res.data.map(c => ({
-          name: getLocalizedString(c.name)
+          name: getLocalizedString(c.name, locale)
         }));
         setCategories([{ name: 'All Products' }, ...mappedCategories]);
       } catch (error) {
@@ -24,7 +25,7 @@ export const Sidebar = ({ activeCategory, setActiveCategory }: any) => {
       }
     };
     fetchCategories();
-  }, [getLocalizedString]);
+  }, [locale]);
 
   return (
     <aside className="hidden lg:flex flex-col w-20 xl:w-64 h-screen sticky top-0 sidebar-luxury py-12 px-4 xl:px-8">

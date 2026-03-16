@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserProfile } from '../types';
 import { api } from '../utils/api';
 
@@ -8,14 +8,16 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, code: string) => Promise<void>;
   logout: () => void;
-  updateProfile: (name: string) => Promise<void>;
+  updateProfile: (nickname: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
   return context;
 };
 
@@ -41,6 +43,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
       }
     };
+
     checkAuth();
   }, []);
 
@@ -71,9 +74,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const updateProfile = async (nickname: string) => {
-    const response = await api.patch<UserProfile>('/me', {
-      nickname,
-    });
+    const response = await api.put<UserProfile>('/me/profile', { nickname });
     setUser(response.data);
   };
 

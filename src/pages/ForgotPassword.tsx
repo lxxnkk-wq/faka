@@ -22,7 +22,7 @@ export const ForgotPasswordPage = () => {
       addToast('Please enter your email first.', 'error');
       return;
     }
-    if (config?.captcha?.scenes?.send_verify_code && !captchaVerified) {
+    if (config?.captcha?.scenes?.reset_send_code && !captchaVerified) {
       addToast('Please complete the human verification.', 'info');
       return;
     }
@@ -43,11 +43,6 @@ export const ForgotPasswordPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (config?.captcha?.scenes?.forgot_password && !captchaVerified) {
-      addToast('Please complete the human verification.', 'info');
-      return;
-    }
-
     setError('');
     setLoading(true);
     try {
@@ -120,13 +115,13 @@ export const ForgotPasswordPage = () => {
             />
           </div>
 
-          {(config?.captcha?.scenes?.forgot_password || config?.captcha?.scenes?.send_verify_code) && (
+          {config?.captcha?.scenes?.reset_send_code && (
             <LuxuryCaptcha onVerify={setCaptchaVerified} />
           )}
 
           <button 
             type="submit" 
-            disabled={loading || ((config?.captcha?.scenes?.forgot_password || config?.captcha?.scenes?.send_verify_code) && !captchaVerified)}
+            disabled={loading || (config?.captcha?.scenes?.reset_send_code && !captchaVerified)}
             className="w-full py-4 bg-brand text-black font-black uppercase tracking-[0.2em] text-xs rounded-xl hover:bg-white transition-all disabled:opacity-50"
           >
             {loading ? 'Processing...' : 'Reset Password'}

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   BrowserRouter as Router, 
   Routes, 
@@ -36,9 +36,6 @@ import { NewsPage, NewsDetailPage } from './pages/News';
 import { LoginPage } from './pages/Login';
 import { SignupPage } from './pages/Signup';
 import { ForgotPasswordPage } from './pages/ForgotPassword';
-
-// Data
-import { PRODUCTS } from './data';
 
 const AppContent = () => {
   const [activeCategory, setActiveCategory] = useState('All Products');

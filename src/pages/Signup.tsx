@@ -24,7 +24,7 @@ export const SignupPage = () => {
       addToast('Please enter your email first.', 'error');
       return;
     }
-    if (config?.captcha?.scenes?.send_verify_code && !captchaVerified) {
+    if (config?.captcha?.scenes?.register_send_code && !captchaVerified) {
       addToast('Please complete the human verification.', 'info');
       return;
     }
@@ -46,11 +46,6 @@ export const SignupPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (config?.captcha?.scenes?.register && !captchaVerified) {
-      addToast('Please complete the human verification.', 'info');
-      return;
-    }
-
     setError('');
     setLoading(true);
     try {
@@ -119,13 +114,13 @@ export const SignupPage = () => {
             />
           </div>
 
-          {(config?.captcha?.scenes?.register || config?.captcha?.scenes?.send_verify_code) && (
+          {config?.captcha?.scenes?.register_send_code && (
             <LuxuryCaptcha onVerify={setCaptchaVerified} />
           )}
 
           <button 
             type="submit" 
-            disabled={loading || ((config?.captcha?.scenes?.register || config?.captcha?.scenes?.send_verify_code) && !captchaVerified)}
+            disabled={loading || (config?.captcha?.scenes?.register_send_code && !captchaVerified)}
             className="w-full py-4 bg-brand text-black font-black uppercase tracking-[0.2em] text-xs rounded-xl hover:bg-white transition-all disabled:opacity-50"
           >
             {loading ? 'Initializing...' : 'Initialize Identity'}
